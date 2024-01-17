@@ -38,7 +38,9 @@ data class Position(
     val size: Size,
     val avgPrice: Double = 0.0,
     val mktPrice: Double = avgPrice,
-    val lastUpdate: Instant = Instant.MIN
+    val lastUpdate: Instant = Instant.MIN,
+    val leverage: Double = 3.0,
+    val margin: Double = 0.0
 ) {
 
     /**
@@ -63,7 +65,12 @@ data class Position(
             size.sign != newSize.sign -> p.copy(size = newSize)
 
             newSize.absoluteValue > size.absoluteValue -> {
-                val newAvgPrice = (size.toDouble() * avgPrice + p.size.toDouble() * p.avgPrice) / newSize.toDouble()
+                val newAvgPrice = if (asset.isInverse) {
+                    // calculate the contract value in bitcoin, then divide by
+                    newSize.toDouble() / ((size.toDouble() / avgPrice) + (p.size.toDouble() / p.avgPrice))
+                } else {
+                    (size.toDouble() * avgPrice + p.size.toDouble() * p.avgPrice) / newSize.toDouble()
+                }
                 p.copy(size = newSize, avgPrice = newAvgPrice)
             }
 
@@ -78,10 +85,33 @@ data class Position(
      */
     fun realizedPNL(update: Position): Amount {
         val newSize = size + update.size
-        return when {
-            size.sign != newSize.sign -> asset.value(size, update.avgPrice - avgPrice)
-            newSize.absoluteValue > size.absoluteValue -> Amount(asset.currency, 0.0)
-            else -> asset.value(update.size, avgPrice - update.avgPrice)
+        return if (asset.isInverse) {
+            if (long || short) {
+                when {
+                    size.sign != newSize.sign ->
+                        Amount(asset.currency, (size * ((1 / avgPrice) - (1 / update.avgPrice))).toDouble())
+
+                    newSize.absoluteValue > size.absoluteValue ->
+                        Amount(asset.currency, 0.0)
+
+                    else ->
+                        Amount(asset.currency, (update.size * ((1 / update.avgPrice) - (1 / avgPrice))).toDouble())
+                }
+            } else {
+                Amount(asset.currency, 0.0)
+            }
+        } else {
+            // original code for realizedPNL(update: Position)
+            when {
+                size.sign != newSize.sign ->
+                    asset.value(size, update.avgPrice - avgPrice)
+
+                newSize.absoluteValue > size.absoluteValue ->
+                    Amount(asset.currency, 0.0)
+
+                else ->
+                    asset.value(update.size, avgPrice - update.avgPrice)
+            }
         }
     }
 
@@ -114,14 +144,62 @@ data class Position(
      * in the currency denoted by the asset
      */
     val unrealizedPNL: Amount
-        get() = asset.value(size, mktPrice - avgPrice)
+        get() = calcUnrealizedPNL()
+
+    private fun calcUnrealizedPNL(): Amount {
+
+        return if (asset.isInverse) {
+
+            if (long) {
+                // Unrealized P&L = Contract Qty x [(1/Avg Entry Price) - (1/Last Traded Price)]
+                Amount(asset.currency, (size * ((1 / avgPrice) - (1 / mktPrice))).toDouble())
+            } else if (short) {
+                // Unrealized P&L = Contract Qty x [(1/Last Traded Price) - (1/Avg Entry Price)]
+                Amount(asset.currency, (size.absoluteValue * ((1 / mktPrice) - (1 / avgPrice))).toDouble())
+            } else {
+                Amount(asset.currency, 0.0)
+            }
+        } else {
+            asset.value(size, mktPrice - avgPrice)
+        }
+    }
+
+
+    fun calcLiqPrice(leverage: Double = this.leverage): Double? {
+
+        return if (asset.isInverse) {
+//                val leverage = 1 // ie 1X leverage
+            val imr = 1 / leverage
+            val mmr = 0.005 // specific to BTCUSD inverse perp
+            if (long) {
+                // Average entry price/{(1+IMR-MMR)+[Extra margin added*(Entry price/Contract Size)]}
+                avgPrice / (1 + imr - mmr)
+            } else if (short) {
+                //Average entry price/{(1-IMR+MMR)-[Extra margin added*(Entry price/Contract Size)]}
+                avgPrice / (1 - imr + mmr)
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
 
     /**
      * The total market value for this position based on last known market price, in the currency denoted by the asset.
      * Short positions will typically return a negative value.
      */
     val marketValue: Amount
-        get() = asset.value(size, mktPrice)
+        get() = if (asset.isInverse) {
+
+            // difficulty understanding the relationship of having negative value here
+            // when account equity uses positions.marketValue = positions.sumOf( marketValue)
+            (asset.value(size, avgPrice).absoluteValue / leverage).plus(unrealizedPNL.value)
+        } else {
+            asset.value(size, mktPrice)
+        }
+
 
     /**
      * The gross exposure for this position based on last known market price, in the currency denoted by the asset.

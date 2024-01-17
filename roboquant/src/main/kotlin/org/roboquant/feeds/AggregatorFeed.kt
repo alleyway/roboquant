@@ -123,7 +123,7 @@ class AggregatorFeed(
 }
 
 
-internal fun getPriceBar(action: Action, timeSpan: TimeSpan?): PriceBar? {
+fun getPriceBar(action: Action, timeSpan: TimeSpan?): PriceBar? {
     return when (action) {
 
         is PriceBar -> {

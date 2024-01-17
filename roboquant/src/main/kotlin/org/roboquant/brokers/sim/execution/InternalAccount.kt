@@ -17,6 +17,7 @@
 package org.roboquant.brokers.sim.execution
 
 import org.roboquant.brokers.Account
+import org.roboquant.brokers.ClosedPNL
 import org.roboquant.brokers.Position
 import org.roboquant.brokers.Trade
 import org.roboquant.brokers.marketValue
@@ -54,6 +55,11 @@ class InternalAccount(var baseCurrency: Currency, private val retention: TimeSpa
     private val trades = mutableListOf<Trade>()
 
     /**
+     * The closedPNL of trades that have been closed
+     */
+    private var closedPNLs = mutableListOf<ClosedPNL>()
+
+    /**
      * Open orders
      */
     private val openOrders = mutableMapOf<Int, OrderState>()
@@ -86,6 +92,7 @@ class InternalAccount(var baseCurrency: Currency, private val retention: TimeSpa
     fun clear() {
         closedOrders.clear()
         trades.clear()
+        closedPNLs.clear()
         lastUpdate = Instant.MIN
         openOrders.clear()
         portfolio.clear()
@@ -164,6 +171,13 @@ class InternalAccount(var baseCurrency: Currency, private val retention: TimeSpa
     @Synchronized
     fun addTrade(trade: Trade) {
         trades.add(trade)
+    }
+
+    /**
+     * Add a new [closedPNL] to this internal account
+     */
+    fun addClosedPNL(closedPNL: ClosedPNL) {
+        closedPNLs.add(closedPNL)
     }
 
     /**
@@ -263,5 +277,6 @@ class InternalAccount(var baseCurrency: Currency, private val retention: TimeSpa
      */
     fun getOrder(orderId: Int): Order? = openOrders[orderId]?.order
 
+    fun getOrderState(orderId: Int): OrderState? = openOrders[orderId]
 }
 

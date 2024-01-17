@@ -63,8 +63,11 @@ data class Asset(
         id: String = ""
     ) : this(symbol, type, Currency.getInstance(currencyCode), Exchange.getInstance(exchangeCode), multiplier, id)
 
+    internal val isInverse: Boolean
+
     init {
         require(symbol.isNotBlank()) { "Symbol in an asset cannot be empty or blank" }
+        isInverse = id.contains("::Inverse")
     }
 
     /**
@@ -150,6 +153,13 @@ data class Asset(
             return Asset("$base/$quote", AssetType.FOREX, quote, "FOREX")
         }
 
+        val BITCOIN_INVERSE_PERP = Asset(
+            "BTCUSD",
+            AssetType.CRYPTO,
+            Currency.BTC,
+            exchange = Exchange.CRYPTO,
+            id = "linearOrInverse::InversePerpetual"
+        )
     }
 
     /**
@@ -158,7 +168,13 @@ data class Asset(
      */
     fun value(size: Size, price: Double): Amount {
         // If size is zero, an unknown price (Double.NanN) is fine
-        return if (size.iszero) Amount(currency, 0.0) else Amount(currency, size.toDouble() * multiplier * price)
+        return if (size.iszero) Amount(currency, 0.0) else
+            if (isInverse) {
+                // inverse short or long is qty/divided by price in "execValue" of WS execution
+                Amount(currency, size.toDouble() / price)
+            } else {
+                Amount(currency, size.toDouble() * multiplier * price)
+            }
     }
 
     /**

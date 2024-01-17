@@ -18,6 +18,7 @@ package org.roboquant.brokers.sim
 
 import org.roboquant.brokers.Account
 import org.roboquant.brokers.Broker
+import org.roboquant.brokers.ClosedPNL
 import org.roboquant.brokers.Position
 import org.roboquant.brokers.Trade
 import org.roboquant.brokers.sim.execution.Execution
@@ -100,6 +101,85 @@ open class SimBroker(
         return currentPos.realizedPNL(position)
     }
 
+    private fun updateInverseMarginAccount(
+        execution: Execution,
+        time: Instant
+    ) {
+        val asset = execution.order.asset
+        val execPos = Position(asset, execution.size, execution.price)
+        // Calculate the fees that apply to this execution
+        val fee = feeModel.calculate(execution, time, this.account.trades)
+
+        val p = _account.portfolio
+        val existingPos = p.getOrDefault(asset, Position.empty(asset))
+        val newPosition = existingPos + execPos // simply calculate size and avgPrice if adding to position
+        if (newPosition.closed) p.remove(asset) else p[asset] = newPosition
+
+        val pnl = existingPos.realizedPNL(execPos)
+
+        val newTrade = Trade(
+            time,
+            asset,
+            execution.size,
+            execution.price,
+            fee,
+            (pnl - fee).value,
+            execution.order.id
+        )
+        _account.addTrade(newTrade)
+
+        _account.cash.withdraw(Amount(Currency.BTC, fee))
+
+        if (existingPos.size.nonzero && existingPos.size.sign != execution.size.sign) { // must have closed
+
+            val closedSize =
+                if (newPosition.closed || newPosition.size.sign == execution.size.sign) {
+                    // we closed the existing position entirely
+                    existingPos.size.unaryMinus()
+                } else {
+                    // we closed just the execution amount
+                    execPos.size
+                }
+
+            val newClosedPNL = ClosedPNL(
+                time,
+                asset,
+                closedSize,
+                existingPos.avgPrice,
+                execution.price,
+                (pnl - fee).value,
+                execution.order.id
+            )
+
+            if (newClosedPNL.pnlValue < 0) {
+                logger.warn { "Took a negative PnL: ${newClosedPNL.pnlValue}" }
+            }
+            _account.addClosedPNL(newClosedPNL)
+
+            val closedMargin =
+                asset.value(closedSize.absoluteValue, existingPos.avgPrice) * (1 / existingPos.leverage)
+
+            _account.cash.deposit(closedMargin + pnl)
+
+        }
+        if (newPosition.open) {
+            // we added to our position or have reversed position
+            val marginSize =
+                if (newPosition.size.sign != existingPos.size.sign) {
+                    // reversed
+                    newPosition.size
+                } else {
+                    if (newPosition.size.absoluteValue > existingPos.size.absoluteValue)
+                    // added
+                        execution.size
+                    else
+                        Size(0)
+                }
+            val margin = asset.value(marginSize.absoluteValue, execution.price) * (1 / existingPos.leverage)
+            _account.cash.withdraw(margin)
+        }
+    }
+
     /**
      * Update the account based on an execution. This will perform the following steps:
      *
@@ -111,6 +191,14 @@ open class SimBroker(
         execution: Execution,
         time: Instant
     ) {
+
+        if (accountModel.javaClass.toString()
+                .contains("MarginAccountInverse")
+        ) {
+            updateInverseMarginAccount(execution, time)
+            return
+        }
+
         val asset = execution.order.asset
         val position = Position(asset, execution.size, execution.price)
 

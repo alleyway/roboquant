@@ -26,7 +26,7 @@ import org.roboquant.common.ParallelJobs
  * @property feeds
  * @constructor Create a new Combined Live Feed
  */
-class CombinedLiveFeed(vararg val feeds: LiveFeed) : Feed {
+class CombinedLiveFeed(vararg val feeds: LiveFeed) : LiveFeed() {
 
     /**
      * @see Feed.play
