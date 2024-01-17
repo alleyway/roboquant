@@ -17,6 +17,7 @@
 package org.roboquant.brokers.sim.execution
 
 import org.roboquant.brokers.sim.Pricing
+import org.roboquant.common.Logging
 import org.roboquant.common.Size
 import org.roboquant.common.UnsupportedException
 import org.roboquant.common.days
@@ -136,8 +137,25 @@ internal class MarketOrderExecutor(order: MarketOrder) : SingleOrderExecutor<Mar
      * Market orders will always fill 100% against the [pricing] provided. It uses [Pricing.marketPrice] to
      * get the actual price.
      */
-    override fun fill(remaining: Size, pricing: Pricing): Execution =
-        Execution(order, remaining, pricing.marketPrice(remaining))
+
+    val logger = Logging.getLogger(MarketOrderExecutor::class)
+
+    override fun fill(remaining: Size, pricing: Pricing): Execution {
+
+        val marketExecPrice = if (remaining.isNegative)
+            pricing.lowPrice(remaining)
+        else
+            pricing.highPrice(remaining)
+
+        val type = if (remaining.isNegative) {
+            "Sell"
+        } else {
+            "Buy"
+        }
+        logger.info("Executed Market ${type} order | qty: ${remaining} price: ${marketExecPrice}")
+        return Execution(order, remaining, marketExecPrice)
+    }
+
 }
 
 private fun stopTrigger(stop: Double, size: Size, pricing: Pricing): Boolean {
@@ -168,8 +186,28 @@ private fun getTrailStop(oldStop: Double, trail: Double, size: Size, pricing: Pr
 
 internal class LimitOrderExecutor(order: LimitOrder) : SingleOrderExecutor<LimitOrder>(order) {
 
+    // how can we simulate that here?
+
+    val logger = Logging.getLogger(LimitOrderExecutor::class)
+
     override fun fill(remaining: Size, pricing: Pricing): Execution? {
         return if (limitTrigger(order.limit, remaining, pricing)) {
+
+            logger.debug("order.limit: ${order.limit}, "
+                + "highPrice: ${pricing.highPrice(remaining)}, "
+                + "lowPrice: ${pricing.lowPrice(remaining)}")
+//            val limitExecPrice = if (remaining.isNegative)
+//                pricing.lowPrice(remaining)
+//            else
+//                pricing.highPrice(remaining)
+
+            val type = if (remaining.isNegative) {
+                "Sell"
+            } else {
+                "Buy"
+            }
+
+            logger.debug("Executing Limit ${type} order | qty: ${remaining} price: ${order.limit}")
             Execution(order, remaining, order.limit)
         } else {
             null

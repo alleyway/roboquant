@@ -212,12 +212,12 @@ data class TradePrice(override val asset: Asset, val price: Double, override val
  * @property bidSize
  * @constructor Create empty Price quote
  */
-data class PriceQuote(
+open class PriceQuote(
     override val asset: Asset,
-    val askPrice: Double,
-    val askSize: Double,
-    val bidPrice: Double,
-    val bidSize: Double
+    open val askPrice: Double,
+    open val askSize: Double,
+    open val bidPrice: Double,
+    open val bidSize: Double
 ) : PriceAction {
 
     /**

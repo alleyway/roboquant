@@ -140,25 +140,24 @@ open class SimBroker(
                     // we closed just the execution amount
                     execPos.size
                 }
-
+            // just assume open fee was a maker fee...
+            val openFee = feeModel.calculate(Execution(execution.order, closedSize, existingPos.avgPrice),
+                time, this.account.trades)
             val newClosedPNL = ClosedPNL(
                 time,
                 asset,
                 closedSize,
                 existingPos.avgPrice,
                 execution.price,
-                (pnl - fee).value,
+                (pnl - fee - openFee).value,
                 execution.order.id
             )
-
             if (newClosedPNL.pnlValue < 0) {
-                logger.warn { "Took a negative PnL: ${newClosedPNL.pnlValue}" }
+                logger.warn { "Took a negative PnL: ${Amount(Currency.BTC, newClosedPNL.pnlValue)}" }
             }
             _account.addClosedPNL(newClosedPNL)
-
             val closedMargin =
                 asset.value(closedSize.absoluteValue, existingPos.avgPrice) * (1 / existingPos.leverage)
-
             _account.cash.deposit(closedMargin + pnl)
 
         }
@@ -171,9 +170,7 @@ open class SimBroker(
                 } else {
                     if (newPosition.size.absoluteValue > existingPos.size.absoluteValue)
                     // added
-                        execution.size
-                    else
-                        Size(0)
+                        execution.size else Size(0)
                 }
             val margin = asset.value(marginSize.absoluteValue, execution.price) * (1 / existingPos.leverage)
             _account.cash.withdraw(margin)
