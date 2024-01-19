@@ -176,6 +176,7 @@ class InternalAccount(var baseCurrency: Currency, private val retention: TimeSpa
     /**
      * Add a new [closedPNL] to this internal account
      */
+    @Synchronized
     fun addClosedPNL(closedPNL: ClosedPNL) {
         closedPNLs.add(closedPNL)
     }
