@@ -19,8 +19,12 @@ package org.roboquant.brokers.sim.execution
 import org.roboquant.brokers.sim.PricingEngine
 import org.roboquant.feeds.Event
 import org.roboquant.orders.*
+import java.time.Instant
 import java.util.*
 import kotlin.reflect.KClass
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.ZERO
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Engine that simulates how orders are executed on financial markets. For any create-order to be executed, it needs a
@@ -29,9 +33,9 @@ import kotlin.reflect.KClass
  * @property pricingEngine pricing engine to use to determine the price
  * @constructor Create new Execution engine
  */
-class ExecutionEngine(private val pricingEngine: PricingEngine) {
+class ExecutionEngine(private val pricingEngine: PricingEngine, private val executionDelay: Duration = 0.milliseconds) {
 
-    /**
+    /**f
      * @suppress
      */
     companion object {
@@ -88,23 +92,33 @@ class ExecutionEngine(private val pricingEngine: PricingEngine) {
 
     }
 
-    private class ModifyOrderState(val order: ModifyOrder, var status: OrderStatus = OrderStatus.INITIAL)
+    private class OrderExecutorWrapper(val executor: OrderExecutor<*>, val initAt: Instant)
+
+    private class ModifyOrderState(
+        val order: ModifyOrder, var status: OrderStatus = OrderStatus.INITIAL, val initAt: Instant)
 
     private val modifiers = LinkedList<ModifyOrderState>()
 
     // Return the create-order executors
-    private val executors = LinkedList<OrderExecutor<*>>()
+    private val executors = LinkedList<OrderExecutorWrapper>()
 
     /**
-     * Get the open order executors
+     * Get the modifiers prior to cutoff
      */
-    private fun <T : OrderExecutor<*>> List<T>.open() = filter { it.status.open }
+    private fun List<ModifyOrderState>.openModifiers(beforeTime: Instant) =
+        filter { it.status.open && it.initAt <= beforeTime }
+
+    /**
+     * Get the open order executors prior to cutoff
+     */
+    private fun List<OrderExecutorWrapper>.open(beforeTime: Instant) =
+        filter { it.executor.status.open && it.initAt <= beforeTime }
 
     /**
      * Remove all executors of closed orders, both create orders and modify orders
      */
     internal fun removeClosedOrders() {
-        executors.removeIf { it.status.closed }
+        executors.removeIf { it.executor.status.closed }
         modifiers.removeIf { it.status.closed }
     }
 
@@ -112,16 +126,17 @@ class ExecutionEngine(private val pricingEngine: PricingEngine) {
      * Return the order states of all executors
      */
     internal val orderStates
-        get() = executors.map { Pair(it.order, it.status) } + modifiers.map { Pair(it.order, it.status) }
+        get() = executors.map {
+            Pair(it.executor.order, it.executor.status) } + modifiers.map { Pair(it.order, it.status) }
 
     /**
      * Add a new [order] to the execution engine. Orders can only be processed if there is a corresponding executor
      * registered for the order class.
      */
-    internal fun add(order: Order): Boolean {
+    internal fun add(order: Order, time: Instant = Instant.now()): Boolean {
         return when (order) {
-            is ModifyOrder -> modifiers.add(ModifyOrderState(order, OrderStatus.INITIAL))
-            is CreateOrder -> executors.add(getExecutor(order))
+            is ModifyOrder -> modifiers.add(ModifyOrderState(order, OrderStatus.INITIAL, time))
+            is CreateOrder -> executors.add(OrderExecutorWrapper(getExecutor(order), time))
         }
     }
 
@@ -129,8 +144,8 @@ class ExecutionEngine(private val pricingEngine: PricingEngine) {
      * Add all [orders] to the execution engine.
      * @see [add]
      */
-    internal fun addAll(orders: List<Order>) {
-        for (order in orders) add(order)
+    internal fun addAll(orders: List<Order>, time: Instant = Instant.now()) {
+        for (order in orders) add(order, time)
     }
 
     /**
@@ -142,33 +157,59 @@ class ExecutionEngine(private val pricingEngine: PricingEngine) {
      * 2. Then process regular create-orders, but only if there is a price action in the event for the
      * underlying asset
      */
+    @Suppress("CyclomaticComplexMethod")
     internal fun execute(event: Event): List<Execution> {
         val time = event.time
 
+        val cutoffTime = if (executionDelay == ZERO) {
+            event.time.plusMillis(50) // just to handle tiny difference if place() was called without time
+        } else {
+            event.time.minusNanos(executionDelay.inWholeNanoseconds)
+        }
+
+        val openModifierOrders = modifiers.openModifiers(cutoffTime)
+
+        var prices = if (openModifierOrders.isEmpty()) null else event.prices
+
         // We always first execute modify-orders. These are executed even if there is no known price for the asset
-        for (modifyOrderState in modifiers) {
+        for (modifyOrderState in openModifierOrders) {
             val modifyOrder = modifyOrderState.order
             modifyOrderState.status = OrderStatus.ACCEPTED
-            val createHandler = executors.firstOrNull { it.order.id == modifyOrder.order.id }
-            if (createHandler != null && createHandler.modify(modifyOrder, time)) {
-                modifyOrderState.status = OrderStatus.COMPLETED
-            } else {
+            val createHandler = executors.firstOrNull { it.executor.order.id == modifyOrder.order.id }
+            if (createHandler == null) {
                 modifyOrderState.status = OrderStatus.REJECTED
+            } else {
+                val success = when (modifyOrder) {
+                    is UpdateOrder -> {
+                        val action = prices!![createHandler.executor.order.asset] ?: continue
+                        val pricing = pricingEngine.getPricing(action, time)
+                        createHandler.executor.modify(modifyOrder, time, pricing)
+                    }
+                    else -> {
+                        //probably a CancelOrder
+                        createHandler.executor.modify(modifyOrder, time)
+                    }
+                }
+                if (success) {
+                    modifyOrderState.status = OrderStatus.COMPLETED
+                } else {
+                    modifyOrderState.status = OrderStatus.REJECTED
+                }
             }
         }
 
         // Now execute the create-orders. These are only executed if there is a known price
-        val openCreateOrders = executors.open()
+        val openCreateOrders = executors.open(cutoffTime)
 
         // Return if there is nothing to do, to avoid the creation of event.prices
         if (openCreateOrders.isEmpty()) return emptyList()
 
         val executions = mutableListOf<Execution>()
-        val prices = event.prices
+        if (prices == null) prices = event.prices
         for (executor in openCreateOrders) {
-            val action = prices[executor.order.asset] ?: continue
+            val action = prices[executor.executor.order.asset] ?: continue
             val pricing = pricingEngine.getPricing(action, time)
-            val newExecutions = executor.execute(pricing, time)
+            val newExecutions = executor.executor.execute(pricing, time)
             executions.addAll(newExecutions)
         }
         return executions

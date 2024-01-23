@@ -59,7 +59,7 @@ internal class BracketOrderExecutor(override val order: BracketOrder) : OrderExe
         return executions
     }
 
-    override fun modify(modifyOrder: ModifyOrder, time: Instant): Boolean {
+    override fun modify(modifyOrder: ModifyOrder, time: Instant, pricing: Pricing?): Boolean {
         return when (modifyOrder) {
             is CancelOrder -> cancel(modifyOrder, time)
             else -> false

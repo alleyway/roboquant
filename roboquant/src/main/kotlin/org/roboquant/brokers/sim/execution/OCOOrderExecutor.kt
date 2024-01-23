@@ -71,7 +71,7 @@ internal class OCOOrderExecutor(override val order: OCOOrder) : OrderExecutor<OC
         return emptyList()
     }
 
-    override fun modify(modifyOrder: ModifyOrder, time: Instant): Boolean {
+    override fun modify(modifyOrder: ModifyOrder, time: Instant, pricing: Pricing?): Boolean {
         return when (modifyOrder) {
             is CancelOrder -> cancel(modifyOrder, time)
             else -> false

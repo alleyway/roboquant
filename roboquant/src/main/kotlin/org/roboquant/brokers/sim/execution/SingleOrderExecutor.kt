@@ -33,6 +33,8 @@ import java.time.Instant
  */
 internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var order: T) : OrderExecutor<T> {
 
+    val logger = Logging.getLogger(SingleOrderExecutor::class)
+
     /**
      * Fill so far
      */
@@ -74,6 +76,13 @@ internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var 
             is FOK -> remaining.nonzero
             is GTD -> time > tif.date
             is IOC -> time > openedAt
+            is PO -> {
+                val ret =(time == openedAt) && remaining.iszero // Added line
+                if (ret) {
+                    logger.debug { "Enforcing Post-Only for $order" }
+                }
+                ret
+            }
             else -> throw UnsupportedException("unsupported time-in-force policy tif=$tif")
         }
     }
@@ -100,7 +109,10 @@ internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var 
     }
 
     @Suppress("ReturnCount")
-    fun update(order: CreateOrder, time: Instant): Boolean {
+    fun update(order: CreateOrder, time: Instant, pricing: Pricing): Boolean {
+        // "order" ^^ is actually the UpdateOrder.updateOrder
+        // returning true means success
+
         if (status == OrderStatus.ACCEPTED && expired(time)) return false
         if (status.closed) return false
 
@@ -109,17 +121,30 @@ internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var 
         return if (newOrder != null) {
             if (newOrder.size != order.size) return false
             this.order = newOrder
-            true
+            when (newOrder) {
+                is LimitOrder -> {
+                    if (limitTrigger(newOrder.limit, newOrder.size, pricing)) {
+                        logger.debug { "Rejecting LimitOrder that would trigger immediately: $newOrder" }
+                        false
+                    } else {
+                        true
+                    }
+                }
+                else -> {
+                    logger.warn { "Updating order that is NOT LimitOrder: $newOrder" }
+                    true
+                }
+            }
         } else {
             false
         }
 
     }
 
-    override fun modify(modifyOrder: ModifyOrder, time: Instant): Boolean {
+    override fun modify(modifyOrder: ModifyOrder, time: Instant, pricing: Pricing?): Boolean {
         return when (modifyOrder) {
             is CancelOrder -> cancel(time)
-            is UpdateOrder -> update(modifyOrder.update, time)
+            is UpdateOrder -> update(modifyOrder.update, time, pricing!!)
             else -> false
         }
     }
@@ -137,8 +162,6 @@ internal class MarketOrderExecutor(order: MarketOrder) : SingleOrderExecutor<Mar
      * Market orders will always fill 100% against the [pricing] provided. It uses [Pricing.marketPrice] to
      * get the actual price.
      */
-
-    val logger = Logging.getLogger(MarketOrderExecutor::class)
 
     override fun fill(remaining: Size, pricing: Pricing): Execution {
 
@@ -188,8 +211,6 @@ internal class LimitOrderExecutor(order: LimitOrder) : SingleOrderExecutor<Limit
 
     // how can we simulate that here?
 
-    val logger = Logging.getLogger(LimitOrderExecutor::class)
-
     override fun fill(remaining: Size, pricing: Pricing): Execution? {
         return if (limitTrigger(order.limit, remaining, pricing)) {
 
@@ -200,13 +221,12 @@ internal class LimitOrderExecutor(order: LimitOrder) : SingleOrderExecutor<Limit
 //                pricing.lowPrice(remaining)
 //            else
 //                pricing.highPrice(remaining)
-
             val type = if (remaining.isNegative) {
                 "Sell"
             } else {
                 "Buy"
             }
-
+            print("Limit Execution!\u0007")
             logger.debug("Executing Limit ${type} order | qty: ${remaining} price: ${order.limit}")
             Execution(order, remaining, order.limit)
         } else {

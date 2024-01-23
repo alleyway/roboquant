@@ -95,7 +95,7 @@ class LimitOrder(
     asset: Asset,
     size: Size,
     val limit: Double,
-    tif: TimeInForce = GTC(),
+    tif: TimeInForce = PO(),
     tag: String = ""
 ) : SingleOrder(asset, size, tif, tag) {
 

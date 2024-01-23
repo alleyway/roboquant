@@ -60,7 +60,7 @@ internal class OTOOrderExecutor(override val order: OTOOrder) : OrderExecutor<OT
         return result
     }
 
-    override fun modify(modifyOrder: ModifyOrder, time: Instant): Boolean {
+    override fun modify(modifyOrder: ModifyOrder, time: Instant, pricing: Pricing?): Boolean {
         return when (modifyOrder) {
             is CancelOrder -> cancel(modifyOrder, time)
             else -> false

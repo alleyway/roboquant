@@ -106,3 +106,17 @@ class FOK : TimeInForce {
     override fun toString(): String = "FOK"
 
 }
+
+/**
+ * Post-Only (PO) policy. If the order would be filled immediately when submitted, it will be cancelled.
+ *
+ * @constructor Create a new PO tif
+ */
+class PO : TimeInForce {
+
+    /**
+     * Returns string representation of PO
+     */
+    override fun toString(): String = "PO"
+
+}

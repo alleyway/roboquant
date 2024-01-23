@@ -28,6 +28,7 @@ import org.roboquant.common.*
 import org.roboquant.feeds.Event
 import org.roboquant.orders.Order
 import java.time.Instant
+import kotlin.time.Duration
 
 /**
  * Simulated Broker that is used as the broker during back testing and live testing. It simulates both broker and
@@ -47,7 +48,8 @@ open class SimBroker(
     private val feeModel: FeeModel = NoFeeModel(),
     private val accountModel: AccountModel = CashAccount(),
     pricingEngine: PricingEngine = SpreadPricingEngine(),
-    retention: TimeSpan = 1.years
+    retention: TimeSpan = 1.years,
+    executionDelay: Duration = Duration.ZERO
 ) : Broker {
 
     /**
@@ -64,7 +66,7 @@ open class SimBroker(
     private val logger = Logging.getLogger(SimBroker::class)
 
     // Execution engine used for simulating trades
-    private val executionEngine = ExecutionEngine(pricingEngine)
+    private val executionEngine = ExecutionEngine(pricingEngine, executionDelay)
 
     /**
      * Get the state of the account since the last [sync]
@@ -255,7 +257,7 @@ open class SimBroker(
     override fun place(orders: List<Order>, time: Instant) {
         logger.trace { "Received orders=${orders.size} time=$time" }
         _account.initializeOrders(orders)
-        executionEngine.addAll(orders)
+        executionEngine.addAll(orders, time)
     }
 
     /**
