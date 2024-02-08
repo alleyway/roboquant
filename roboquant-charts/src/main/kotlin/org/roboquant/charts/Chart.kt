@@ -138,14 +138,18 @@ abstract class Chart {
     companion object {
 
         // Which commit of echarts.min.js to use
-        private const val COMMIT = "fddcad9e93c1c15495c70f358f1ccbb595f0964f"
+//        private const val COMMIT = "fddcad9e93c1c15495c70f358f1ccbb595f0964f"
+        private const val COMMIT = "7b7eeb2930aedf49de58572edb33cb0d20b31d68"
 
         /**
          * The URL of the ECHARTS javascript library to use.
          * This script includes some roboquant specific functions and is hosted on GitHub
          */
+//        const val JSURL =
+//        "https://cdn.jsdelivr.net/gh/neurallayer/roboquant-jupyter-js@$COMMIT/echarts.min.js?version=$COMMIT"
         const val JSURL =
-            "https://cdn.jsdelivr.net/gh/neurallayer/roboquant-jupyter-js@$COMMIT/echarts.min.js?version=$COMMIT"
+            "https://cdn.jsdelivr.net/gh/alleyway/roboquant-jupyter-js@$COMMIT/echarts.min.js?version=$COMMIT"
+//        const val JSURL = "symlinked_echarts_dist/echarts.js"
 
         /**
          * Maximum number of samples to plot in a chart. Certain types of charts can become large and as
