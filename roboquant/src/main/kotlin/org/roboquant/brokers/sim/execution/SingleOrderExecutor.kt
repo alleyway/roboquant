@@ -119,8 +119,9 @@ internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var 
         @Suppress("UNCHECKED_CAST")
         val newOrder = order as? T
         return if (newOrder != null) {
-            if (newOrder.size != order.size) return false
+//            if (newOrder.size != order.size) return false
             this.order = newOrder
+            this.order.updateTime = time
             when (newOrder) {
                 is LimitOrder -> {
                     if (limitTrigger(newOrder.limit, newOrder.size, pricing)) {
@@ -226,7 +227,7 @@ internal class LimitOrderExecutor(order: LimitOrder) : SingleOrderExecutor<Limit
             } else {
                 "Buy"
             }
-            print("Limit Execution!\u0007")
+//            print("Limit Execution!\u0007")
             logger.debug("Executing Limit ${type} order | qty: ${remaining} price: ${order.limit}")
             Execution(order, remaining, order.limit)
         } else {

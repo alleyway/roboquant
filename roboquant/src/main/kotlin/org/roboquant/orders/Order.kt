@@ -17,6 +17,7 @@
 package org.roboquant.orders
 
 import org.roboquant.common.Asset
+import java.time.Instant
 
 /**
  * An order is an instruction for a broker to buy or sell an asset or modify an existing order.
@@ -40,6 +41,11 @@ sealed class Order(val asset: Asset, val tag: String) {
      * The order identifier that is automatically generated and unique per process
      */
     var id = nextId()
+
+    /**
+     * added for PlacedOrdersMetric
+     */
+    var updateTime: Instant? = null
 
     /**
      * @suppress
