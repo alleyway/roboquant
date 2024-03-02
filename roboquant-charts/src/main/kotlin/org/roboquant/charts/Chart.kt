@@ -139,7 +139,7 @@ abstract class Chart {
 
         // Which commit of echarts.min.js to use
 //        private const val COMMIT = "fddcad9e93c1c15495c70f358f1ccbb595f0964f"
-        private const val COMMIT = "7b7eeb2930aedf49de58572edb33cb0d20b31d68"
+        private const val COMMIT = "e94d81c2cac9d46e2ba32c2694fc75f91d420222"
 
         /**
          * The URL of the ECHARTS javascript library to use.
@@ -206,9 +206,11 @@ abstract class Chart {
      */
     protected fun <T> reduce(data: Collection<T>): Collection<T> {
         return if (data.size > maxSamples) {
+            println("reduce(): re-sampling data: ${data.size} is greater than maxSamples: ${maxSamples}")
             val skip = (0.5 + data.size / maxSamples).roundToInt()
             data.filterIndexed { index, _ -> index % skip == 0 }
         } else {
+            println("reduce(): NOT re-sampling data: ${data.size} is less than maxSamples: ${maxSamples}")
             data
         }
     }
