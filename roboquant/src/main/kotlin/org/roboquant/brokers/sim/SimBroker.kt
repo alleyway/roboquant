@@ -154,9 +154,9 @@ open class SimBroker(
                 (pnl - fee - openFee).value,
                 execution.order.id
             )
-            if (newClosedPNL.pnlValue < 0) {
-                logger.warn { "Took a negative PnL: ${Amount(Currency.BTC, newClosedPNL.pnlValue)}" }
-            }
+//            if (newClosedPNL.pnlValue < 0) {
+//                logger.warn { "Took a negative PnL: ${Amount(Currency.BTC, newClosedPNL.pnlValue)}" }
+//            }
             _account.addClosedPNL(newClosedPNL)
             val closedMargin =
                 asset.value(closedSize.absoluteValue, existingPos.avgPrice) * (1 / existingPos.leverage)
