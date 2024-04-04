@@ -112,6 +112,9 @@ abstract class Chart {
     var containsJavaScript: Boolean = false
         protected set
 
+    var containsLegendJavaScript: Boolean = false
+        protected set
+
     /**
      * Allow for customization of the chart.
      * This is invoked by [renderJson] before the json is rendered.
@@ -265,6 +268,12 @@ abstract class Chart {
      */
     protected fun javascriptFunction(function: String): String {
         containsJavaScript = true
+        return function
+    }
+
+
+    protected fun javascriptLegendFunction(function: String): String {
+        containsLegendJavaScript = true
         return function
     }
 
