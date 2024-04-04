@@ -33,6 +33,11 @@ fun Chart.asHTML(theme: String): String {
     else
         ""
 
+    val convertorLegend = if (containsLegendJavaScript)
+        "option.legend.formatter = new Function('p', option.legend.formatter);"
+    else
+        ""
+
     val themeStatement = if (theme == "auto") """
             let theme = document.body.dataset.jpThemeLight === 'false' ? 'dark' : 'light'
         """.trimIndent() else """
@@ -50,7 +55,7 @@ fun Chart.asHTML(theme: String): String {
                     if (elem.tagName === "HEAD") {
                         elem = document.getElementById("$id");
                     }
-                    const option = $fragment;$convertor
+                    const option = $fragment;$convertor$convertorLegend                    
                     window.call_echarts(
                         function () {
                             $themeStatement;
