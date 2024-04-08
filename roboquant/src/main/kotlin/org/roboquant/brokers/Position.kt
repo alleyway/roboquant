@@ -39,8 +39,9 @@ data class Position(
     val avgPrice: Double = 0.0,
     val mktPrice: Double = avgPrice,
     val lastUpdate: Instant = Instant.MIN,
-    val leverage: Double = 3.0,
-    val margin: Double = 0.0
+    val leverage: Double = 3.0
+//    ,
+//    val margin: Double = 0.0
 ) {
 
     /**
@@ -222,6 +223,25 @@ data class Position(
      * Would the overall position size be reduced given the provided [additional] size
      */
     fun isReduced(additional: Size): Boolean = (size + additional).absoluteValue < size.absoluteValue
+
+
+    /**
+     * Michael's contribution
+     * NOTE: this neglects closing fees which should be included
+     */
+
+    private fun calcMargin(): Amount {
+        val unrealizedPNL = calcUnrealizedPNL()
+
+        val loss = if (!unrealizedPNL.isPositive) {
+            unrealizedPNL.value
+        } else 0.0
+
+        return (totalCost / leverage) - loss
+    }
+
+    val marginCalculated: Amount
+        get() = calcMargin()
 
 }
 
