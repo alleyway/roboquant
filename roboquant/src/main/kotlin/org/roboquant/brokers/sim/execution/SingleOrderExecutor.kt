@@ -79,7 +79,7 @@ internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var 
             is PO -> {
                 val ret =(time == openedAt) && remaining.iszero // Added line
                 if (ret) {
-                    logger.debug { "Enforcing Post-Only for $order" }
+                    logger.info { "EXPIRED: Enforcing Post-Only for $order opened at $openedAt" }
                 }
                 ret
             }
@@ -125,7 +125,7 @@ internal abstract class SingleOrderExecutor<T : SingleOrder>(final override var 
             when (newOrder) {
                 is LimitOrder -> {
                     if (limitTrigger(newOrder.limit, newOrder.size, pricing)) {
-                        logger.debug { "Rejecting LimitOrder that would trigger immediately: $newOrder" }
+                        logger.info { "Rejecting LimitOrder that would trigger immediately: $newOrder" }
                         false
                     } else {
                         true
@@ -176,7 +176,7 @@ internal class MarketOrderExecutor(order: MarketOrder) : SingleOrderExecutor<Mar
         } else {
             "Buy"
         }
-        logger.info("Executed Market ${type} order | qty: ${remaining} price: ${marketExecPrice}")
+        logger.info("EXECUTED Market ${type} order | qty: ${remaining} price: ${marketExecPrice}")
         return Execution(order, remaining, marketExecPrice)
     }
 
@@ -228,7 +228,7 @@ internal class LimitOrderExecutor(order: LimitOrder) : SingleOrderExecutor<Limit
                 "Buy"
             }
 //            print("Limit Execution!\u0007")
-            logger.debug("Executing Limit ${type} order | qty: ${remaining} price: ${order.limit}")
+            logger.info("EXECUTED(?) Limit ${type} order | qty: ${remaining} price: ${order.limit}")
             Execution(order, remaining, order.limit)
         } else {
             null
