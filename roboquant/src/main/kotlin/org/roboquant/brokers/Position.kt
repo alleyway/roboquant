@@ -18,6 +18,8 @@ package org.roboquant.brokers
 
 import org.roboquant.common.*
 import java.time.Instant
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * This class holds the position of an asset in the portfolio. The implementation makes no assumptions about the
@@ -39,9 +41,6 @@ data class Position(
     val avgPrice: Double = 0.0,
     val mktPrice: Double = avgPrice,
     val lastUpdate: Instant = Instant.MIN,
-    val leverage: Double = 3.0
-//    ,
-//    val margin: Double = 0.0
 ) {
 
     /**
@@ -166,7 +165,7 @@ data class Position(
     }
 
 
-    fun calcLiqPrice(leverage: Double = this.leverage): Double? {
+    fun calcLiqPrice(leverage: Double): Double? {
 
         return if (asset.isInverse) {
 //                val leverage = 1 // ie 1X leverage
@@ -196,11 +195,27 @@ data class Position(
 
             // difficulty understanding the relationship of having negative value here
             // when account equity uses positions.marketValue = positions.sumOf( marketValue)
-            (asset.value(size, avgPrice).absoluteValue / leverage).plus(unrealizedPNL.value)
+//            (asset.value(size, avgPrice).absoluteValue / leverage).plus(unrealizedPNL.value)
+            unrealizedPNL
+
         } else {
             asset.value(size, mktPrice)
         }
 
+
+    fun calcMarginUsage(leverage: Double, takerRate: Double) :Amount {
+
+        val initialMargin = Amount(asset.currency, size.absoluteValue.toDouble() / (avgPrice * leverage))
+        val bankruptcyPrice = if (size.isPositive) {
+            ceil(avgPrice * leverage / (leverage + 1))
+        } else {
+            floor(avgPrice * leverage / (leverage - 1))
+        }
+
+        val feeToClosePosition = asset.value(size.absoluteValue, bankruptcyPrice) * takerRate
+
+        return (initialMargin + feeToClosePosition).convert(asset.currency)
+    }
 
     /**
      * The gross exposure for this position based on last known market price, in the currency denoted by the asset.
@@ -224,24 +239,6 @@ data class Position(
      */
     fun isReduced(additional: Size): Boolean = (size + additional).absoluteValue < size.absoluteValue
 
-
-    /**
-     * Michael's contribution
-     * NOTE: this neglects closing fees which should be included
-     */
-
-    private fun calcMargin(): Amount {
-        val unrealizedPNL = calcUnrealizedPNL()
-
-        val loss = if (!unrealizedPNL.isPositive) {
-            unrealizedPNL.value
-        } else 0.0
-
-        return (totalCost / leverage) - loss
-    }
-
-    val marginCalculated: Amount
-        get() = calcMargin()
 
 }
 

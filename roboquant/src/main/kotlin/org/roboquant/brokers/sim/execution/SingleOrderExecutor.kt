@@ -228,7 +228,7 @@ internal class LimitOrderExecutor(order: LimitOrder) : SingleOrderExecutor<Limit
                 "Buy"
             }
 //            print("Limit Execution!\u0007")
-            logger.info("EXECUTED(?) Limit ${type} order | qty: ${remaining} price: ${order.limit}")
+            logger.info("EXECUTED(?) Limit ${type} order | qty: ${remaining} price: ${order.limit} | order.id: ${order.id} ")
             Execution(order, remaining, order.limit)
         } else {
             null

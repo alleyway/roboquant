@@ -18,7 +18,6 @@ package org.roboquant.brokers.sim
 
 import org.roboquant.brokers.Account
 import org.roboquant.brokers.Broker
-import org.roboquant.brokers.ClosedPNL
 import org.roboquant.brokers.Position
 import org.roboquant.brokers.Trade
 import org.roboquant.brokers.sim.execution.Execution
@@ -117,7 +116,7 @@ open class SimBroker(
         val newPosition = existingPos + execPos // simply calculate size and avgPrice if adding to position
         if (newPosition.closed) p.remove(asset) else p[asset] = newPosition
 
-        val pnl = existingPos.realizedPNL(execPos)
+        val pnl = existingPos.realizedPNL(execPos) - fee
 
         val newTrade = Trade(
             time,
@@ -125,58 +124,59 @@ open class SimBroker(
             execution.size,
             execution.price,
             fee,
-            (pnl - fee).value,
+            pnl.value,
             execution.order.id
         )
         _account.addTrade(newTrade)
 
-        _account.cash.withdraw(Amount(Currency.BTC, fee))
+        _account.cash.deposit(pnl)
 
-        if (existingPos.size.nonzero && existingPos.size.sign != execution.size.sign) { // must have closed
-
-            val closedSize =
-                if (newPosition.closed || newPosition.size.sign == execution.size.sign) {
-                    // we closed the existing position entirely
-                    existingPos.size.unaryMinus()
-                } else {
-                    // we closed just the execution amount
-                    execPos.size
-                }
-            // just assume open fee was a maker fee...
-            val openFee = feeModel.calculate(Execution(execution.order, closedSize, existingPos.avgPrice),
-                time, this.account.trades)
-            val newClosedPNL = ClosedPNL(
-                time,
-                asset,
-                closedSize,
-                existingPos.avgPrice,
-                execution.price,
-                (pnl - fee - openFee).value,
-                execution.order.id
-            )
-//            if (newClosedPNL.pnlValue < 0) {
-//                logger.warn { "Took a negative PnL: ${Amount(Currency.BTC, newClosedPNL.pnlValue)}" }
-//            }
-            _account.addClosedPNL(newClosedPNL)
-            val closedMargin =
-                asset.value(closedSize.absoluteValue, existingPos.avgPrice) * (1 / existingPos.leverage)
-            _account.cash.deposit(closedMargin + pnl)
-
-        }
-        if (newPosition.open) {
-            // we added to our position or have reversed position
-            val marginSize =
-                if (newPosition.size.sign != existingPos.size.sign) {
-                    // reversed
-                    newPosition.size
-                } else {
-                    if (newPosition.size.absoluteValue > existingPos.size.absoluteValue)
-                    // added
-                        execution.size else Size(0)
-                }
-            val margin = asset.value(marginSize.absoluteValue, execution.price) * (1 / existingPos.leverage)
-            _account.cash.withdraw(margin)
-        }
+//        if (existingPos.size.nonzero && existingPos.size.sign != execution.size.sign) { // must have closed
+//
+//            val closedSize =
+//                if (newPosition.closed || newPosition.size.sign == execution.size.sign) {
+//                    // we closed the existing position entirely
+//                    existingPos.size.unaryMinus()
+//                } else {
+//                    // we closed just the execution amount
+//                    execPos.size
+//                }
+//
+//            val openFee = feeModel.calculate(Execution(execution.order, closedSize, existingPos.avgPrice),
+//                time, this.account.trades)
+//
+//            val newClosedPNL = ClosedPNL(
+//                time,
+//                asset,
+//                closedSize,
+//                existingPos.avgPrice,
+//                execution.price,
+//                (pnl - fee - openFee).value,
+//                execution.order.id
+//            )
+////            if (newClosedPNL.pnlValue < 0) {
+////                logger.warn { "Took a negative PnL: ${Amount(Currency.BTC, newClosedPNL.pnlValue)}" }
+////            }
+//            _account.addClosedPNL(newClosedPNL)
+//            val closedMargin =
+//                asset.value(closedSize.absoluteValue, existingPos.avgPrice) * (1 / 3.0)
+//            _account.cash.deposit(closedMargin + pnl)
+//
+//        }
+//        if (newPosition.open) {
+//            // we added to our position or have reversed position
+//            val marginSize =
+//                if (newPosition.size.sign != existingPos.size.sign) {
+//                    // reversed
+//                    newPosition.size
+//                } else {
+//                    if (newPosition.size.absoluteValue > existingPos.size.absoluteValue)
+//                    // added
+//                        execution.size else Size(0)
+//                }
+//            val margin = asset.value(marginSize.absoluteValue, execution.price) * (1 / 3.0)
+//            _account.cash.withdraw(margin)
+//        }
     }
 
     /**
